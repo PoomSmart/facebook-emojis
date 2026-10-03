@@ -20,14 +20,14 @@ function fetch_single($img, $alt_img, $type_key, $dir, $size, $ratio)
 
 	if (file_exists($path)) return;
 
-	$types = array(
+	$types = [
 		'FBEMOJI' => 'f',
 		'FB_EMOJI_EXTENDED' => 'e',
 		'MESSENGER' => 'z',
 		'UNICODE' => 'u',
 		'COMPOSITE' => 'c',
 		'EMOJI_3' => 't',
-	);
+	];
 
 	$type = $types[$type_key];
 
@@ -82,15 +82,6 @@ function try_fetch($url, $path)
 	return true;
 }
 
-function encodeURIComponent($str)
-{ /* a standard method in Javascript */
-	return $str;
-}
-function unescape($str)
-{
-	$trans = array('&amp;' => '&', '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&#x27;' => "'");
-	return strtr($str, $trans);
-}
 function checksum($subpath)
 {
 	$checksumBase = 317426846;
@@ -106,28 +97,43 @@ function checksum($subpath)
 function http_fetch($url, $filename)
 {
 	$fh = fopen($filename, 'w');
-
-	$options = array(
-		CURLOPT_FILE	=> $fh,
-		CURLOPT_TIMEOUT	=> 60,
-		CURLOPT_URL	=> $url,
-	);
-
-	$options[CURLOPT_HTTPHEADER] = array(
-		'Referer: https://www.facebook.com/',
-		'User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36',
-	);
+	if ($fh === false) {
+		fwrite(STDERR, "Cannot open {$filename} for writing\n");
+		exit(1);
+	}
 
 	$ch = curl_init();
-	curl_setopt_array($ch, $options);
-	curl_exec($ch);
+	if ($ch === false) {
+		fclose($fh);
+		fwrite(STDERR, "curl_init failed\n");
+		exit(1);
+	}
+
+	$ok = curl_setopt_array($ch, [
+		CURLOPT_FILE => $fh,
+		CURLOPT_TIMEOUT => 60,
+		CURLOPT_URL => $url,
+		CURLOPT_HTTPHEADER => [
+			'Referer: https://www.facebook.com/',
+			'User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36',
+		],
+	]);
+	if ($ok === false) {
+		fclose($fh);
+		fwrite(STDERR, "curl_setopt_array failed: " . curl_error($ch) . "\n");
+		exit(1);
+	}
+
+	$ok = curl_exec($ch);
 	$ret = curl_getinfo($ch);
-	curl_close($ch);
 
 	fclose($fh);
 
 	echo "({$ret['http_code']}) ($url)\n";
-	if ($ret['http_code'] != 200) {
+	if ($ok === false || $ret['http_code'] != 200) {
+		if ($ok === false) {
+			fwrite(STDERR, curl_error($ch) . "\n");
+		}
 		@unlink($filename);
 		exit(1);
 	}
